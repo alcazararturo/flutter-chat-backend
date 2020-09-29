@@ -1,92 +1,89 @@
 const { response } = require('express');
 const bcrypt = require('bcryptjs');
-const { generarJWT } = require('../helpers/jwt');
+
 const Usuario = require('../models/usuario');
+const { generarJWT } = require('../helpers/jwt');
 
-const crearUsuario = async (req, res = response) => {
-
+const crearUsuario = async (req, res = response ) => {
     const { email, password } = req.body;
     try {
-        let usuario = await Usuario.findOne({ email });
-        if (usuario) { 
+        const existeEmail = await Usuario.findOne({ email });
+        if( existeEmail ) {
             return res.status(400).json({
                 ok: false,
-                msg: 'Credenciales no validas'
+                msg: 'El correo ya está registrado'
             });
         }
-        usuario = new Usuario( req.body );
+        const usuario = new Usuario( req.body );
         // Encriptar contraseña
-        var salt = bcrypt.genSaltSync(10);
+        const salt = bcrypt.genSaltSync();
         usuario.password = bcrypt.hashSync( password, salt );
         await usuario.save();
-        // Generar JWT
-        const token = await generarJWT(usuario.id, usuario.name);
-        res.status(201).json({ 
+        // Generar mi JWT
+        const token = await generarJWT( usuario.id );
+        res.json({
             ok: true,
-            uid: usuario.id,
-            name: usuario.name,
+            usuario,
             token
         });
     } catch (error) {
         console.log(error);
         res.status(500).json({
             ok: false,
-            msg: 'Por favor hable con el administrador'
+            msg: 'Hable con el administrador'
         });
     }
 };
 
-const loginUsuario = async (req, res = response) => {
+const login = async ( req, res = response ) => {
     const { email, password } = req.body;
-    
-    try {
-        const usuario = await Usuario.findOne({ email });
-        if (!usuario) { 
-            return res.status(400).json({
+    try {      
+        const usuarioDB = await Usuario.findOne({ email });
+        if ( !usuarioDB ) {
+            return res.status(404).json({
                 ok: false,
-                msg: 'Usuario no existe'
+                msg: 'Email no encontrado'
             });
         }
-        // Confirmar password
-        const validPassword = bcrypt.compareSync(password, usuario.password);
+        // Validar el password
+        const validPassword = bcrypt.compareSync( password, usuarioDB.password );
         if ( !validPassword ) {
             return res.status(400).json({
                 ok: false,
-                msg: 'Credenciales incorrectas'
+                msg: 'La contraseña no es valida'
             });
         }
-        // generar JWT
-        const token = await generarJWT(usuario.id, usuario.name);
-        res.status(201).json({ 
+        // Generar el JWT
+        const token = await generarJWT( usuarioDB.id );      
+        res.json({
             ok: true,
-            uid: usuario.id,
-            name: usuario.name,
+            usuario: usuarioDB,
             token
         });
-        
     } catch (error) {
         console.log(error);
-        res.status(500).json({
+        return res.status(500).json({
             ok: false,
-            msg: 'Por favor hable con el administrador'
+            msg: 'Hable con el administrador'
         });
     }
 };
 
-const revalidarToken = async (req, res = response) => {
-    const { uid, name } = req;
-    // generar un nuevo JWT
-    const token = await generarJWT(uid, name);
-    res.json({ 
+const renewToken = async( req, res = response) => {
+    const uid = req.uid;
+    // generar un nuevo JWT, generarJWT... uid...
+    const token = await generarJWT( uid );
+    // Obtener el usuario por el UID, Usuario.findById... 
+    const usuario = await Usuario.findById( uid );
+    res.json({
         ok: true,
-        uid,
-        name,
+        usuario,
         token
     });
 };
 
 module.exports = {
     crearUsuario,
-    loginUsuario,
-    revalidarToken
-}
+    login,
+    renewToken
+};
